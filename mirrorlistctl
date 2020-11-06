@@ -1,0 +1,101 @@
+#!/bin/bash
+usage()
+{
+	printf "Usage: %s: −s [my|all|fresh|ranked] -r [{local}|fresh]\n" $(basename "$0")
+	printf " -s\tset default mirror list from list\n"
+	# printf "-u\tget fresh mirror list\n"
+	printf " -r\trank mirror list\n"
+	exit 2
+}
+
+getFreshML()
+{
+	ML_URL="https://www.archlinux.org/mirrorlist/all"
+
+	wget --quiet --output-document="${FML}" "${ML_URL}" || return 1
+	tmp=$(mktemp)
+	cat "${FML}" | sed -e 's/^#Server/Server/' -e '/^#/d' > ${tmp}
+	mv ${tmp} ${FML}
+	chmod 644 ${FML}
+				
+	return 0
+}
+
+source /home/pumpurumprumpum/.color.sh
+
+[[ $UID != 0 ]] && printf "go root please\n" && exit -1
+(( $# == 0 )) && usage && exit 1
+
+BEST_COUNT=6
+
+ML="/etc/pacman.d/mirrorlist"
+MML="$(printf ${ML}).my"
+AML="$(printf ${ML}).all"
+FML="$(printf ${ML}).fresh"
+RML="$(printf ${ML}).ranked"
+BUML="$(printf ${ML}).backup"
+
+FML_A=1
+if [[ ! -f "${FML}" ]]; then
+	if [[ ! getFreshML ]]; then 
+		printf "Cant get Fresh ML\n"
+		FML_A=0
+	fi
+fi
+
+OPTSET="hr:us:"
+while getopts ${OPTSET} OPT
+do
+	case ${OPT} in
+		s)
+			if [[ ${OPTARG} == my ]]; then
+				NML=${MML}
+			elif [[ ${OPTARG} == all ]]; then
+				NML=${AML}
+			elif [[ ${OPTARG} == fresh ]]; then
+				if [[ ${FML_A} == "1" ]]; then
+					NML=${FML}
+				else
+					printf "Error: Fresh mirror list unavailible\n"
+				fi
+			elif [[ ${OPTARG} == ranked ]]; then
+				NML=${RML}
+			else
+				printf "Error: invalide argument for -${OPT}: ${OPTARG}\n"
+				usage
+			fi
+			;;
+		# u)
+		# 	;;
+		r)
+			cp ${ML} ${BUML}
+			if [[ ${OPTARG} == local ]]; then
+				echo "Ranking local mirros..."
+				rankmirrors -n ${BEST_COUNT} ${BUML} > ${RML}
+			elif [[ ${OPTARG} == fresh ]]; then
+				echo "-Getting fresh mirror list..."
+				if [[ $(getFreshML) ]]; then
+					printf "Cant get fresh ml\n"
+					exit 2
+				fi
+				echo "--Ranking fresh mirror list..."
+				rankmirrors -n ${BEST_COUNT} ${FML} > ${RML}
+			else
+				printf "Error: invalide argument for -${OPT}: ${OPTARG}\n\n"
+				usage
+			fi
+			;;
+		h)
+			usage
+			;;
+		?)
+			printf "Unavailible option \"${OPT}\"\n"
+			usage
+			;;
+	esac
+done
+
+if [[ -n ${NML} ]]; then
+	printf "Now you use \"%s\" mirrorlist\n" $(awk -F'mirrorlist.' '{print $2}' <<< ${NML})
+	[[ -f "${NML}" ]] && cp "${NML}" "${ML}"
+fi

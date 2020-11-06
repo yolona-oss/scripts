@@ -1,0 +1,27 @@
+#!/bin/bash
+# Download all sources for $1 file in sequence
+
+pop(){
+	query="${1}"
+	lines=$(wc -l ${query} | awk '{print $1}')
+	tmp=$(mktemp)
+
+	if (( $lines > 0 ))
+	then
+		tail -n $((lines - 1)) $query > $tmp
+		cat $tmp > $query
+		rm $tmp
+	fi
+}
+
+dst="$(realpath "${1:-query}")"
+if [[ -z $dst ]]; then
+	echo no query file
+	exit 1
+fi
+cat "${dst}" | while read line; do
+	youtube-dl "${line}" && pop "${dst}"
+done
+
+unset dst
+exit 0

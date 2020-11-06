@@ -1,0 +1,38 @@
+#!/bin/bash
+
+usage()
+{
+	echo "$(basename $0): [local|fresh]"
+	exit 1
+}
+
+if [[ $UID != 0 ]]; then
+	echo "error: you cannot perform this operation unless you are root."
+	exit 1
+fi
+
+BEST_COUNT=6
+SORT_OBJ=${1:-local}
+
+echo "Creating backup..."
+cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
+
+# awk '/^## Название страны$/{f=1; next}f==0{next}/^$/{exit}{print substr($0, 1);}' /etc/pacman.d/mirrorlist.backup
+
+echo "Uncommenting entries..."
+sed -i 's/^#Server/Server/' /etc/pacman.d/mirrorlist.backup
+
+if [[ ${SORT_OBJ} == "local" ]]
+	echo "Ranking local mirros.."
+	rankmirrors -n ${BEST_COUNT} /etc/pacman.d/mirrorlist.backup > /etc/pacman.d/mirrorlist
+else if [[ ${SORT_OBJ} == "fresh" ]]; then
+	echo "Getting fresh mirror list..."
+	echo "Ranking fresh mirror list..."
+	curl -s "https://www.archlinux.org/mirrorlist/?country=FR&country=GB&protocol=https&use_mirror_status=on" | sed -e 's/^#Server/Server/' -e '/^#/d' | rankmirrors -n ${BEST_COUNT} -
+else
+	$(usage)
+fi
+
+echo "Success!"
+
+exit 0

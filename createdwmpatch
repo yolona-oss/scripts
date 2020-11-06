@@ -1,0 +1,7 @@
+#!/bin/bash
+> dwm-patch.diff
+find "$(realpath "$1")" -type f -print0 | while read -d $'\0' file
+do
+	file="$(awk -F"$1" '{print $NF}' <<< "$file")"
+	diff -up "$2"/"$file" "$1"/"$file" >> dwm-patch.diff
+done

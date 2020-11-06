@@ -1,0 +1,3 @@
+#!/bin/bash
+
+scrot -q 100 /tmp/temporary_screenshot.jpg
