@@ -1,0 +1,103 @@
+#!/bin/bash
+
+usage()
+{
+	printf "$(basename "$0"): src:dst -[frc]\n Replasing src with dst in file of group files\n -f [file1] [file2]\treplasing in file or group of files\n -r [path/to/dir]\trecursivly replasing\n -c\tclean save files\n"
+}
+
+if [[ ${1} =~ [?*:?*] ]]; then
+	src=$(cut -d: -f1 <<< "${1}")
+	dst=$(cut -d: -f2 <<< "${1}")
+	echo "Remove \"$src\" with \"$dst\""
+	shift 
+else
+	usage
+	printf "\nError: No pattern setted. Aborting\n"
+	exit 1
+fi
+
+savepostfix="save"
+
+OPTSET="cf:r:h"
+while getopts "${OPTSET}" OPT
+do
+	case ${OPT} in
+		f)
+			file=$(realpath "${OPTARG}")
+			if [[ ! -f "$file" ]]; then
+				echo "File not exits: $file"
+				exit 1
+			fi
+
+			echo "Processing file $file..."
+			# add numeration
+			sed -i.${savepostfix} "s/$src/$dst/g" "${file}"
+			shift
+			;;
+		r)
+			if [[ -z ${OPTARG} ]]; then
+				dir=$(pwd)
+			elif [[ -d ${OPTARG} ]]; then
+				# file=$(realpath "${OPTARG}")
+				# dir=$(dirname "$file")
+				dir=${OPTARG}
+				# if [[ ! -d "$dir" ]]; then
+				# 	echo "Dircetory not exist: $dir"
+					# exit 1
+				# fi
+			else
+				echo "No dir"
+				exit 1
+			fi
+
+			echo -n "Continue recursive removing $src with $dst in $dir? "
+			read yn
+			echo
+			case $yn in
+				[yY]*)
+					echo "Starting..."
+					;;
+				[nN]*)
+					echo "Aborting"
+					exit 0
+					;;
+				*)
+					echo "Aborting"
+					exit 0
+					;;
+			esac
+			
+			# add excluding of saved files and other
+			while read file
+			do
+				echo "Editing $file"
+				sed -i.${savepostfix} "s/$src/$dst/g" "$file"
+			done <<< $(find "$dir" \( ! -regex '.*/\..*' \) -type f)
+
+			echo "Done"
+			;;
+		c)
+			echo -n "Do you realy wanna clean backups? "
+			read yn
+			echo
+			case $yn in
+				[yY]*)
+					echo "Starting..."
+					;;
+				[nN]*)
+					echo "Aborting"
+					exit 0
+					;;
+				*)
+					echo "Aborting"
+					exit 0
+					;;
+			esac
+			rm -f *.${savepostfix}
+			;;
+		h)
+			usage
+			exit 1
+			;;
+	esac
+done
