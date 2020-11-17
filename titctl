@@ -2,7 +2,6 @@
 
 make_todo_list()
 {
-	BD="$TODO_DIR/.db"
 	subjects=(ИТ
 		ОСиС
 		ЭВМ
@@ -113,7 +112,7 @@ make_colorized_list()
 		let i++
 	done <<< $(find "${TODO_DIR}" \( ! -regex '.*/\..*' \) -type l | sort -k1) #-k1
 
-	printf "\n${i} Tasks\n"
+	printf "\n${i} Tasks\t\t%q Done\n" "$(grep -E '.docx|.pdf|.DOCX' ${BD} | wc -l)"
 	printf "\x1b[0m"
 } > ${currentlist}
 
@@ -126,6 +125,7 @@ colorized_list()
 TIT_DIR="${HOME}/Documents/TIT"
 TODO_DIR="${TIT_DIR}/toDo"
 ARCHIVE_DIR="${TIT_DIR}/Archive"
+BD="$TODO_DIR/.db"
 listdb="${TIT_DIR}/.listdb"
 listhash="${TIT_DIR}/.hash"
 currentlist="${TIT_DIR}/.list"
@@ -140,7 +140,7 @@ do
 		a)
 			zip="${OPTARG}"
 			name=$(unzip -l "${zip}" | awk 'NR == 4 {print $NF}' | sed 's/\///g')
-			[[ -f "${zip}" ]] && unzip "${zip}"
+			[[ -r "${zip}" ]] && unzip "${zip}"
 			mv "${zip}" "${ARCHIVE_DIR}/${zip}"
 			mv "${name}" "${TIT_DIR}/$(date '+%m.%d.%Y')"
 
@@ -200,13 +200,13 @@ do
 			case $yn in
 				[yY])
 					rm "${file}"
-					printf "Deletion successfully complited"
+					printf "Deletion successfully complited\n"
 					;;
 				[nN])
-					printf "Aborting"
+					printf "Aborting\n"
 					;;
 				*)
-					printf "Aborting"
+					printf "Aborting\n"
 					;;
 			esac
 
