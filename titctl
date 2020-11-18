@@ -1,5 +1,17 @@
 #!/bin/bash
 
+usage()
+{
+	printf "%q: -hmor -a [zipped file] -l (sc)\n" "$(basename "${0}")"
+	printf "\n"
+	printf " -a [zipped file]\tadd TIT sources to work directory and make todo list\n"
+	printf " -m\t\t\t\t\tmake todo list\n"
+	printf " -l (sc)\t\t\tprint list of todo. "sc" argument mead use simple colors\n"
+	printf " -o [ID]\t\t\topen the lection number [ID]\n"
+	printf " -h\t\t\t\t\tshow this help\n"
+	printf "\nBy default always opening the list\n"
+}
+
 make_todo_list()
 {
 	subjects=(ИТ
@@ -10,12 +22,14 @@ make_todo_list()
 		"Основы экономики"
 		"Психология общения"
 		"Культура речи")
-
+	
+	i=0
 	for day in ${TIT_DIR}/$date_patter
 	do
 		while read lection
 		do
 			if [[ ! $(grep "$lection" "$BD") ]]; then
+				let i++
 				prefix=$(basename "$(dirname "$lection")")
 				if [[ "${prefix}" != ${date_patter} ]]; then
 					pprefix="$(basename "$(dirname "$(dirname "$lection")")") "
@@ -36,6 +50,13 @@ make_todo_list()
 			fi
 		done <<< $(find "$day" \( ! -regex '.*/\..*' \) -type f)
 	done
+	
+	if (( ${i} > 0 )); then
+		printf "%q Lections\n" ${i}
+	else
+		printf "Nothing to do\n"
+		toprint=0
+	fi
 }
 
 make_listdb()
@@ -58,9 +79,9 @@ list()
 {
 		make_listdb
 		echo
-		printf "\033[1m"
+		printf '\x1b[1m'
 		printf "%3q %12q %4q %1q\n" "ID" "Date" "Size" "Lection"
-		printf "\033[36m"
+		printf '\x1b[36m'
 		cat "${listdb}"
 }
 
@@ -136,7 +157,7 @@ date_patter=[0-9][0-9].[0-9][0-9].20[0-9][0-9]
 toprint=1
 
 
-OPTSET="a:gmo:lr:"
+OPTSET="a:mo:lr:"
 while getopts ${OPTSET} OPT
 do
 	case ${OPT} in
@@ -190,7 +211,7 @@ do
 			;;
 		l)
 			shift
-			if [[ $1 == nc ]]; then
+			if [[ $1 == sc ]]; then
 				list
 			else
 				colorized_list
@@ -256,7 +277,16 @@ do
 			usage
 			exit 1
 			;;
+		?)
+			usage
+			exit 1
+			;;
 	esac
 done
+
+# if ((OPTIND == 1))
+# then
+# 	echo "No options specified"
+# fi
 
 (( ${toprint} == 1 )) && colorized_list
