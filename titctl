@@ -32,7 +32,7 @@ make_todo_list()
 				prefix+=" ${subj}"
 				ln -s "${lection}" "${TODO_DIR}/${prefix}" &&
 					echo "${lection}" >> "${BD}"
-				printf "Added "$(basename "$lection")"\n"
+				printf "Added $(basename "$lection")\n"
 			fi
 		done <<< $(find "$day" \( ! -regex '.*/\..*' \) -type f)
 	done
@@ -56,6 +56,8 @@ make_listdb()
 
 list()
 {
+		make_listdb
+		echo
 		printf "\033[1m"
 		printf "%3q %12q %4q %1q\n" "ID" "Date" "Size" "Lection"
 		printf "\033[36m"
@@ -65,6 +67,7 @@ list()
 make_colorized_list()
 {
 	i=0
+	echo
 	printf "%3q %12q %4q %1q\n" "ID" "Date" "Size" "Lection"
 	while read file
 	do
@@ -112,7 +115,7 @@ make_colorized_list()
 		let i++
 	done <<< $(find "${TODO_DIR}" \( ! -regex '.*/\..*' \) -type l | sort -k1) #-k1
 
-	printf "\n${i} Tasks\t\t%q Done\n" "$(grep -E '.docx|.pdf|.DOCX' ${BD} | wc -l)"
+	printf "\n${i} Tasks\t\t%q Done\n" "$(( $(grep -E '.docx|.pdf|.DOCX' ${BD} | wc -l) - i ))"
 	printf "\x1b[0m"
 } > ${currentlist}
 
@@ -124,31 +127,66 @@ colorized_list()
 
 TIT_DIR="${HOME}/Documents/TIT"
 TODO_DIR="${TIT_DIR}/toDo"
-ARCHIVE_DIR="${TIT_DIR}/Archive"
+ARCHIVE_DIR="${TIT_DIR}/Archives"
 BD="$TODO_DIR/.db"
 listdb="${TIT_DIR}/.listdb"
 listhash="${TIT_DIR}/.hash"
 currentlist="${TIT_DIR}/.list"
 date_patter=[0-9][0-9].[0-9][0-9].20[0-9][0-9]
+toprint=1
 
-make_listdb
 
 OPTSET="a:gmo:lr:"
 while getopts ${OPTSET} OPT
 do
 	case ${OPT} in
 		a)
-			zip="${OPTARG}"
-			name=$(unzip -l "${zip}" | awk 'NR == 4 {print $NF}' | sed 's/\///g')
-			[[ -r "${zip}" ]] && unzip "${zip}"
-			mv "${zip}" "${ARCHIVE_DIR}/${zip}"
-			mv "${name}" "${TIT_DIR}/$(date '+%m.%d.%Y')"
+			zip="$(realpath "${OPTARG}")"
 
-			exit 0
+			if ! [[ -r "${zip}" ]]; then
+				echo "Error: no such file: ${zip}"
+				exit 1
+			fi
+			shift 2
+
+			date="$(date '+%d.%m.%Y')"
+			if [[ "${1}" == "n" ]]; then
+				tmp="$(awk -F'.' 'BEGIN {OFS = FS} {$1=$1+1; print $0}' <<< "$date")"
+				date="${tmp}"
+			fi
+
+			extr_dir=$(mktemp -d)
+			name=$(unzip -l "${zip}" | awk -F"   " 'NR == 4 {print $NF}' | sed 's/\///g')
+			unzip -d "${extr_dir}" "${zip}" > /dev/null
+
+			if ! [[ -r "${extr_dir}/${name}" ]]; then
+				echo "Error: unzip error"
+				rm -r ${extr_dir}
+				exit 1
+			fi
+
+			mv "${zip}" "${ARCHIVE_DIR}/$(basename "${zip}")"
+			mv "${extr_dir}/${name}" "${TIT_DIR}/${date}"
+
+			rm -r "${extr_dir}"
+
+			archf=0
+			mainf=0
+			if ! [[ -r "${ARCHIVE_DIR}/$(basename "${zip}")" ]]; then
+				archf=1
+				echo -e "\t$(tput setaf 3)Error$(tput setaf 7): zip not archived!"
+			fi
+			if ! [[ -r "${TIT_DIR}/${date}" ]]; then
+				mainf=1
+				echo -e "\t$(tput setaf 1)Critical$(tput setaf 7): there's nothing added!"
+			fi
+
+			(( $(( mainf + archf )) == 0 )) && echo "Success!"
+
+			make_todo_list
 			;;
 		m)
 			make_todo_list
-			exit 0
 			;;
 		l)
 			shift
@@ -157,39 +195,43 @@ do
 			else
 				colorized_list
 			fi
-
-			exit 0
+			
+			toprint=0
 			;;
 		o)
+			make_listdb
 			id=${OPTARG}
 			if ! [[ ${id} =~ [0-9] ]]; then
 			       echo "Error: invalide ID: $id"
 			       exit 1
 			fi
-			date="$(awk -v num=${id} 'NR > 1 && $1 == num {print $2}' "${listdb}")"
-			name="$(awk -v num=${id} 'NR > 1 && $1 == num {for (i=4; i<NF; i++) printf $i " "; print $NF}' "${listdb}")"
+			date="$(awk -v num=${id} '$1 == num {print $2}' "${listdb}")"
+			name="$(awk -v num=${id} '$1 == num {for (i=4; i<NF; i++) printf $i " "; print $NF}' "${listdb}")"
 			tmp="${date} ${name}"
+			echo "${tmp}"
 			file="$(find "${TODO_DIR}" -name "$tmp")"
 			if ! [[ -f "${file}" ]]; then
 				echo "No such file: $file"
 				exit 1
+			elif ! [[ -r "${file}" ]]; then
+				echo "File is not readable: $file"
 			fi
 			sufix=${name##*.}
-			printf "Opening \"%q\" lection" "${name%.${sufix}} date: ${date}"
+			printf "Opening \"%q\" lection date: %q" "${name%.${sufix}}" "${date}"
 			xdg-open "${file}" &>/dev/null &
 
-			exit 0
+			toprint=0
 			;;
 		r)
+			make_listdb
 			id=${OPTARG}
 			if ! [[ ${id} =~ [0-9] ]]; then
 			       echo "Error: invalide ID: $id"
 			       exit 1
 			fi
-			date="$(awk -v num=${id} 'NR > 1 && $1 == num {print $2}' "${listdb}")"
-			name="$(awk -v num=${id} 'NR > 1 && $1 == num {for (i=4; i<NF; i++) printf $i " "; print $NF}' "${listdb}")"
+			date="$(awk -v num=${id} '$1 == num {print $2}' "${listdb}")"
+			name="$(awk -v num=${id} '$1 == num {for (i=4; i<NF; i++) printf $i " "; print $NF}' "${listdb}")"
 			tmp="${date} ${name}"
-			echo $tmp
 			file="$(find "${TODO_DIR}" -name "$tmp")"
 			if ! [[ -f "${file}" ]]; then
 				echo "No such file: $file"
@@ -209,8 +251,6 @@ do
 					printf "Aborting\n"
 					;;
 			esac
-
-			exit 0
 			;;
 		h)
 			usage
@@ -219,4 +259,4 @@ do
 	esac
 done
 
-colorized_list
+(( ${toprint} == 1 )) && colorized_list

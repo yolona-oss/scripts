@@ -1,4 +1,5 @@
 #!/bin/bash
+interval="0.5"
 mem[0]=$(free --kibi|sed -n 2p|awk '{print $2}')
 bar_size=10
 mem_divider=$(( ${mem[0]} / $bar_size ))
@@ -19,8 +20,8 @@ memory_usage_bar() {
     mem[3]=$(free --kibi | sed -n 2p | awk '{print $6}')
     local offset=$(( ${#mem[@]} -1 ))
     mem[$(( $offset + 1 ))]="#"
-    mem[$(( $offset + 2 ))]="@"
-    mem[$(( $offset + 3 ))]="$"
+    mem[$(( $offset + 2 ))]="%"
+    mem[$(( $offset + 3 ))]="&"
     mem[$(( $offset + 4 ))]="!"
 
     for (( type = 1; type <= $offset; type++ )); do
@@ -35,7 +36,6 @@ memory_usage_bar() {
 }
 
 cpu_temp() {
-    #echo "$(bc <<< "scale=1; $(cat /sys/class/hwmon/hwmon1/temp1_input)/1000")C°" 
     echo "$(( $(< /sys/class/hwmon/hwmon1/temp1_input) / 1000 ))°C"
 }
 
@@ -68,11 +68,20 @@ sys_update_status() {
     echo $updates
 }
 
-mpd() {
-   echo N/A 
+term()
+{
+	done=1
 }
 
-while true; do
-	xsetroot -name "$(sys_update_status) | $(memory_usage_bar) $(cpu_load_bar) | $(date +"%H:%M:%S")"
-    sleep 1s
+done=""
+trap term INT
+trap term TERM
+
+while [[ -z ${done} ]]; do
+	xsetroot -name " $(memory_usage_bar) $(cpu_load_bar) | $(date +"%H:%M")" #$(sys_update_status) | 
+	sleep ${interval}s
 done
+
+xsetroot -name "$(dwm -v)"
+trap SIGINT
+trap SIGTERM
