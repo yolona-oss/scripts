@@ -1,4 +1,17 @@
 #!/bin/bash
+#
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#                                   #
+#vvvvvvvvvvvv#                      #
+#   titctl   #                      #
+#^^^^^^^^^^^^#                      #
+#                                   #
+# Simple organization program       #
+# Using local files and sorting its #
+# Autogenerating todo list          #
+# Printing todo list                #
+#                                   #
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 
 usage()
 {
@@ -277,16 +290,16 @@ do
 			usage
 			exit 1
 			;;
-		?)
-			usage
-			exit 1
-			;;
 	esac
 done
 
-# if ((OPTIND == 1))
-# then
-# 	echo "No options specified"
-# fi
+if (( OPTIND > 0 ))
+then
+	printf "\nNot valide option: \"%q\"\n\n" "${@}"
+	usage
+	exit 1
+fi
 
-(( ${toprint} == 1 )) && colorized_list
+(( ${toprint} == 1 )) colorized_list
+
+exit 0
