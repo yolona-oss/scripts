@@ -104,7 +104,8 @@ make_colorized_list()
 {
 	i=0
 	echo
-	printf "%3q %12q %4q %1q\n" "ID" "Date" "Size" "Lection"
+	size_field_len=4
+	printf "%3q %12q %${size_field_len}q %1q\n" "ID" "Date" "Size" "Lection"
 	while read file
 	do
 		normal='\x1b[0m'
@@ -122,14 +123,11 @@ make_colorized_list()
 		linelen=0
 		base=$(basename "${file}")
 		date="$(echo ${base} | grep -o "^${date_patter}")"
-		lection="$(echo ${base} | sed "s/${date_patter}//g")"
+		lection="$(echo ${base} | sed "s/${date_patter} //g")"
 
-		lid=${#id}
-		ldate=${#date}
-		llection=${#lection}
 		# size="$(wc -l "${file}" | cut -d' ' -f 1)"
 		size="$(du -k "$(realpath "${file}")" | cut -f 1)"
-		linelen=$((${#id}+2 + ${#date}+3 + ${#lection}+1 + 5))
+		linelen=$(( (${#id}+2) + (${#date}+3) + (size_field_len+1) + (${#lection}+1) ))
 		printf "%3q %12q " "${i}" "${date}" 
 		if (( ${size} < 50 )); then
 			printf "\x1b[32m"
@@ -138,13 +136,12 @@ make_colorized_list()
 		elif (( ${size} > 500 )); then
 			printf "\x1b[31m"
 		fi
-		printf "%4q" "${size}"
+		printf "%${size_field_len}q " "${size}"
 		(( ${col} == 1 )) && printf "${fg}" || printf "$normal"
 		printf "${lection}"
 		
-		j=linelen
-		tp=$(( $(tput cols) - j ))
-		(( $col == 1 )) && for null in $(seq ${tp}); do
+		stp=$(( $(tput cols) - (linelen+1) ))
+		(( $col == 1 )) && for null in $(seq ${stp}); do
 			printf " "
 		done
 		printf "${normal}"
