@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # YYMMDD
-date=$(git log -1 --date=format:"%Y.%m.%d" --format="%ad")
+date=$(git log -1 --date=format:"%Y%m%d" --format="%ad")
 
 # shor hash
 hash=$(git rev-parse --short HEAD)
