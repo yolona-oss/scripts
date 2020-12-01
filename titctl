@@ -37,19 +37,31 @@ make_todo_list()
 		"Психология общения"
 		"Культура речи")
 	
+	tmpfile=$(mktemp)
 	i=0
-	for day in ${TIT_DIR}/$date_patter
+	for day in ${TIT_DIR}/${date_patter}
 	do
-		while read lection
+
+		lections=()
+		find "$day" \( ! -regex '.*/\..*' \) -type f -print0 > ${tmpfile}
+		while IFS=$'\0'  read -r -d $'\0'; do
+			    lections+=("$REPLY")
+		done <${tmpfile}
+		rm -f ${tmpfile}
+
+		IFS=
+		for lection in ${lections[@]}
 		do
-			if [[ ! $(grep "$lection" "$BD") ]]; then
+			IFS=' '
+			if [[ -z $(grep "$lection" "$BD") ]]; then
 				let i++
-				prefix=$(basename "$(dirname "$lection")")
-				if [[ "${prefix}" != ${date_patter} ]]; then
-					pprefix="$(basename "$(dirname "$(dirname "$lection")")") "
-					pprefix+=${prefix}
-					prefix=${pprefix}
-				fi
+				# prefix=$(basename "$(dirname "$lection")")
+				# if [[ "${prefix}" != ${date_patter} ]]; then
+				# 	# pprefix="$(basename "$(dirname "$(dirname "$lection")")") "
+				# 	pprefix+=${prefix}
+				# 	prefix=${pprefix}
+				# fi
+				prefix=$(grep -o -E "$date_patter" <<< "${lection}")
 				subj="$(basename "${lection}")"
 				for (( i = 0; i < ${#subjects[@]}; i++ ))
 				do
@@ -57,12 +69,24 @@ make_todo_list()
 						subj="${subjects[$i]}.${subj##*.}"
 					fi
 				done
+
+				echo "Subject: \"${subj}\""
+				while read -p ":: Confirm subject name: " yn; do
+					if [[ ${yn} =~ [yY] ]]; then
+						break
+					fi
+					printf "subject: $subj\n"
+					if [[ [nN] =~ ${yn} ]]; then
+						read -p "Enter new: " subj
+					fi
+				done
+
 				prefix+=" ${subj}"
 				ln -s "${lection}" "${TODO_DIR}/${prefix}" &&
 					echo "${lection}" >> "${BD}"
 				printf "Added $(basename "$lection")\n"
 			fi
-		done <<< $(find "$day" \( ! -regex '.*/\..*' \) -type f)
+		done
 	done
 	
 	if (( ${i} > 0 )); then
@@ -73,22 +97,30 @@ make_todo_list()
 	fi
 }
 
-make_listdb()
+pre_make_listdb()
 {
 	i=0
 	while read file
 	do
-		base=$(basename "${file}")
-		date="$(echo ${base} | grep -o "^${date_patter}")"
-		lection="$(echo ${base} | sed "s/${date_patter}//g")"
-		# size="$(wc -l "${file}" | cut -d' ' -f 1)" # size by text lines
-		size="$(du -k "$(realpath "${file}")" | cut -f 1)"
-		printf "%3q %12q " "${i}" "${date}"
-		printf "%4q" "${size}"
-		printf "${lection}\n"
-		let i++
-	done <<< $(find "${TODO_DIR}" \( ! -regex '.*/\..*' \) -type l | sort -k1)
+		if [[ -n $(grep -i "зачет" <<< "$file") ]]; then
+			[[ ${printExam} == 0 ]] && continue
+		fi
+				base=$(basename "${file}")
+				date="$(echo ${base} | grep -o "^${date_patter}")"
+				lection="$(echo ${base} | sed "s/${date_patter}//g")"
+				# size="$(wc -l "${file}" | cut -d' ' -f 1)" # size by text lines
+				size="$(du -k "$(realpath "${file}")" | cut -f 1)"
+				printf "%3q %12s " "${i}" "${date}"
+				printf "%4q" "${size}"
+				printf "${lection}\n"
+				let i++
+	done <<< $(find "${TODO_DIR}" \( ! -regex '.*/\..*' \) -type l | sort -t'.' -k2,2 -k1)
 } > "${listdb}"
+
+make_listdb()
+{
+	pre_make_listdb
+}
 
 list()
 {
@@ -103,11 +135,16 @@ list()
 make_colorized_list()
 {
 	i=0
+	exams=0
 	echo
 	size_field_len=4
 	printf "%3q %12q %${size_field_len}q %1q\n" "ID" "Date" "Size" "Lection"
 	while read file
 	do
+		if [[ -n $(grep -i "зачет" <<< "$file") ]]; then
+			let exams++
+			[[ ${printExam} == 0 ]] && continue
+		fi
 		normal='\x1b[0m'
 		fg='\x1b[30m'
 		bg='\x1b[47m'
@@ -147,9 +184,9 @@ make_colorized_list()
 		printf "${normal}"
 		printf "\n"
 		let i++
-	done <<< $(find "${TODO_DIR}" \( ! -regex '.*/\..*' \) -type l | sort -k1) #-k1
+	done <<< $(find "${TODO_DIR}" \( ! -regex '.*/\..*' \) -type l | sort -t'.' -k2,2 -k1)
 
-	printf "\n${i} Tasks\t\t%q Done\n" "$(( $(grep -E '.docx|.pdf|.DOCX' ${BD} | wc -l) - i ))"
+	printf "\n%q Tasks / %q Exam\t\t%q Done\n" ${i} ${exams} $(( $(grep -E '.docx|.pdf|.DOCX' ${BD} | wc -l) - i ))
 	printf "\x1b[0m"
 } > ${currentlist}
 
@@ -167,16 +204,20 @@ listdb="${TIT_DIR}/.listdb"
 listhash="${TIT_DIR}/.hash"
 currentlist="${TIT_DIR}/.list"
 date_patter=[0-9][0-9].[0-9][0-9].20[0-9][0-9]
+
 toprint=1
+printExam=0
 
 [[ -d ${TIT_DIR} ]] && mkdir -p ${TIT_DIR}
 [[ -d ${TODO_DIR} ]] && mkdir -p ${TODO_DIR}
 [[ -d ${ARCHIVE_DIR} ]] && mkdir -p ${ARCHIVE_DIR}
 
-OPTSET="a:mo:lr:"
+OPTSET="a:mo:lr:i"
 while getopts ${OPTSET} OPT
 do
 	case ${OPT} in
+		i)
+				printExam=1 ;;
 		a)
 			zip="$(realpath "${OPTARG}")"
 
