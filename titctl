@@ -55,12 +55,6 @@ make_todo_list()
 			IFS=' '
 			if [[ -z $(grep "$lection" "$BD") ]]; then
 				let i++
-				# prefix=$(basename "$(dirname "$lection")")
-				# if [[ "${prefix}" != ${date_patter} ]]; then
-				# 	# pprefix="$(basename "$(dirname "$(dirname "$lection")")") "
-				# 	pprefix+=${prefix}
-				# 	prefix=${pprefix}
-				# fi
 				prefix=$(grep -o -E "$date_patter" <<< "${lection}")
 				subj="$(basename "${lection}")"
 				for (( i = 0; i < ${#subjects[@]}; i++ ))
@@ -71,14 +65,12 @@ make_todo_list()
 				done
 
 				echo "Subject: \"${subj}\""
-				while read -p ":: Confirm subject name: " yn; do
+				while read -p ":: Confirm subject name [yN]: " yn; do
 					if [[ ${yn} =~ [yY] ]]; then
 						break
 					fi
 					printf "subject: $subj\n"
-					if [[ [nN] =~ ${yn} ]]; then
-						read -p "Enter new: " subj
-					fi
+					read -p " Enter new: " subj
 				done
 
 				prefix+=" ${subj}"
@@ -193,7 +185,14 @@ make_colorized_list()
 colorized_list()
 {
 	make_colorized_list
-	cat ${currentlist}
+	term_lines=$(tput lines)
+	list_lines=$(wc -l < ${currentlist})
+	if (( ${term_lines} < ${list_lines} ))
+	then
+		${PAGER:-less} ${currentlist}
+	else
+		cat ${currentlist}
+	fi
 }
 
 TIT_DIR="${HOME}/Documents/TIT"

@@ -21,8 +21,6 @@ getFreshML()
 	return 0
 }
 
-source /home/pumpurumprumpum/.color.sh
-
 [[ $UID != 0 ]] && printf "go root please\n" && exit -1
 (( $# == 0 )) && usage && exit 1
 
@@ -65,8 +63,6 @@ do
 				usage
 			fi
 			;;
-		# u)
-		# 	;;
 		r)
 			cp ${ML} ${BUML}
 			if [[ ${OPTARG} == local ]]; then

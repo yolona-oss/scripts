@@ -1,6 +1,6 @@
 #!/bin/bash
 
-[[ -f patch.diff ]] && cp patch.diff patch.diff.save.$(wc -l <<< $(ls -l))
+[[ -f patch.diff ]] && cp patch.diff patch.diff.save.$(wc -l <<< $(ls -l patch.diff.save*))
 >patch.diff
 pkg=$(grep "pkgname=" PKGBUILD | cut -d= -f2 | sed 's/-git//')
 while read file; do

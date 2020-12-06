@@ -1,3 +1,0 @@
-#!/bin/sh
-
-scrot -q 100 $HOME/screenshots/%d-%m-%Y.jpg

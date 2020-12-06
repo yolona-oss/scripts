@@ -1,0 +1,22 @@
+#!/bin/bash
+
+dmenucmd="dmenu ${*}"
+
+text="No results"
+from=$(printf "default\nru\nen\n" | ${dmenucmd} -l 3 -p "From:")
+[[ -z ${from} ]] && exit 1
+intput=$(printf "" | ${dmenucmd} -p "Type:")
+
+case ${from} in
+	ru)
+			text=$(trans -brief -e google -from ru -to en "${intput}")
+			;;
+	en)
+			text=$(trans -brief -e google -from en -to ru "${intput}")
+			;;
+	*)
+			text=$(trans -brief -e google -from en -to ru "${intput}")
+			;;
+esac
+
+echo ${text} | ${dmenucmd} -l $(( $(wc -l <<< "${text}") + 1))

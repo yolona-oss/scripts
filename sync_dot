@@ -1,0 +1,572 @@
+#!/usr/bin/env bash
+#Script to synchronyse system configuration files using incron.
+#Dependencies:
+#  1. incron
+#  2. awk
+#  3. base
+#  4. sudo
+#  5. bash
+
+# USAGE / HELP
+#VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV#
+
+usage() #https://stackoverflow.com/questions/19507902/bash-script-usage-output-formatting
+{
+	COLUMNS=$(tput cols)
+	# Put here all the options your script accepts
+	local options=(
+		'add <FILE>'
+		'sycn [ALL] <FILE>'
+		'migrate <NAME>'
+		'forman <NAME>'
+		'health <NAME>'
+		'h, help'
+	)
+	# Put here the corresponding descriptions for every option you specified in the array above
+	local descriptions=(
+		"Adding files to incron table, takes one argument - path of file. Argument required."
+		"Command that runs automaticaly every time the incrond is triggered. With <all> specifier syncing all entries in incron table"
+		"Importing or exporting files pathes to/from file. Runs with <to> <from> specifier."
+		"Formating incron table. Runs with <columns> specifier aligning all columns."
+		"Checking incron table for some errors. Runs with <existence> specifier checking all files pathes for existence. Runs with <clones> specifier checking for entry dublicates. By default runs <existence> check"
+		"Display help"
+	)
+	# Put here the offset options will get
+	local options_offset=3
+	# Put here the offset descriptions will get after the longest option
+	local descriptions_offset_after_longest_option=5
+	# Put here the maximum length of descriptions spanning
+	local maximum_descriptions_length=$COLUMNS
+
+	# ---------------------------------
+	# Up until here is the configuration
+	# ---------------------------------
+
+	echo "Usage: $(basename "$0") [OPTION]"
+
+	local max_option_length=1
+	for (( i = 0; i < ${#options[@]}; i++)); do
+		if [[ $max_option_length -lt ${#options[$i]} ]]; then
+			max_option_length=${#options[$i]}
+		fi
+	done
+	# We put in the following variable the total offset of descriptions
+	# after new-lines.
+	local descriptions_new_line_offset=$((${max_option_length} + ${options_offset} + ${descriptions_offset_after_longest_option}))
+	# The next loop is the main loop where we actually print the options with
+	# the corresponding descriptions.
+	for (( i = 0; i < ${#options[@]}; i++)); do
+		printf -- '%*s' ${options_offset}
+		printf -- '%s' "${options[$i]}"
+		# Here we start tracking through out this loop the current index of the
+		# char on the terminal window. This is necessary because in the process
+		# of printing the descriptions' words we'll be able to know how not to
+		# span over the defined maximum length or not to split words when
+		# hitting ${COLUMNS}
+		local current_char_index=$((${options_offset} + ${#options[$i]}))
+		# We calculate the offset which should be given between the current
+		# option and the start of it's description. This is different for every
+		# option because every option has a different length but they all must
+		# be aligned according to the longest option's length and the offsets
+		# we chose above
+		local current_description_offset=$((${max_option_length} - ${#options[$i]} + ${descriptions_offset_after_longest_option}))
+		# We print this offset before printing the description
+		printf -- '%*s' ${current_description_offset}
+		# Updating the current_char_index
+		current_char_index=$((${current_char_index} + ${current_description_offset}))
+		# We put in a temporary variable the current description from the array
+		local current_description="${descriptions[$i]}"
+		# We divide the current_description to an array with the description's
+		# words as the array's elements. This is necessary so we can print the
+		# description without spliting words
+		IFS=' ' read -r -a description_words <<< "${current_description}"
+		# We start a loop for every word in the descriptions words array
+		for (( j = 0; j < ${#description_words[@]}; j++)); do
+			# We update the current char index before actually printing the
+			# next word in the description because of the condition right
+			# afterwards
+			current_char_index=$((${current_char_index} + ${#description_words[$j]} + 1))
+			# We check if the index we will reach will hit the maximum limit we
+			# chose in the beginning or the number of ${COLUMNS} our terminal
+			# gives us
+			if [[ ${current_char_index} -le ${COLUMNS} ]] && [[ ${current_char_index} -le ${maximum_descriptions_length} ]]; then
+				# If we don't hit our limit, print the current word
+				printf -- '%s ' ${description_words[$j]}
+			else
+				# If we've hit our limit, print a new line
+				printf -- '\n'
+				# Print a number of spaces equals to the offset we need to give
+				# according to longest option we have and the other offsets we
+				# defined above
+				printf -- '%*s' ${descriptions_new_line_offset}
+				# print the next word in the new line
+				printf -- '%s ' ${description_words[$j]}
+				# Update the current char index
+				current_char_index=$((${descriptions_new_line_offset} + ${#description_words[$j]}))
+			fi
+		done
+		# print a new line between every option and it's description
+		printf '\n\n'
+	done
+}
+
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
+
+# UTILS
+#VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+
+printWW() { # print shorted string by ${2} param
+	end=${#1}
+	begin=$(( ${end} - ${2} ))
+	[ ${begin} -ge 1 ] && echo "..$(cut -c$(( ${begin} + 3 ))-${end} <<< "$1")" || echo $1
+}
+
+log() { logger -p user.notice "Sync config: $*"; }
+
+varn()
+{
+	for msg in "$@"
+	do
+		echo "[$(red '!!')] $msg"
+		shift
+	done
+}
+
+cleanup()
+{
+	rm -f ${buff} ${buff}.?
+}
+
+die()
+{
+	if [[ -z $1 ]]
+	then
+		varn "Terminating"
+	else
+		varn "$@" "Terminating"
+	fi
+
+	cleanup
+	exit 1
+}
+
+choose()
+{ #continue running program or terminate
+	read -p "${1:-Proceed}? [yN] " yn
+	if ! [[ $yn =~ [yY]|[yY][eE][sS] ]]; then
+		die
+	fi
+}
+
+success_msg() { printf "[$(green "SS")] $*\n"; }
+
+if_success()
+{
+	#check for flag($1) value and print congrat of varn with $2 and $3.
+	#if $2 specified as "die_if_not", then if value is'n satisfactory $flag var
+	#the program will be terminated.
+	#func takes $4 and $5 arguments which parce as an func or program that
+	#will be run according to the value of $flag
+	flag=$1
+
+	if [[ $2 == "die_if_not" ]]
+	then
+		diecmd="die"
+		shift
+	fi
+
+	if (( $flag == 0 ))
+	then
+		success_msg "$2"
+
+		if [[ -n $4 ]]
+		then
+			$4
+		fi
+
+		return 0
+	else
+		varn "$3"
+
+		if [[ -n $5 ]]
+		then
+			$5
+		fi
+
+		if [[ -n $diecmd ]]
+		then
+			$diecmd
+		fi
+
+		return 1
+	fi
+}
+
+#COLORIZING
+_NORMAL=$(tput setaf 7)
+red() { printf "$(tput setaf 1)${*}${_NORMAL}"; }
+green() { printf "$(tput setaf 2)${*}${_NORMAL}"; }
+blue() { printf "$(tput setaf 4)${*}${_NORMAL}"; }
+yellow() { printf "$(tput setaf 3)${*}${_NORMAL}"; }
+cyan() { printf "$(tput setaf 6)${*}${_NORMAL}"; }
+
+colorize_path()
+{
+	base=$(basename "$1")
+	dir=$(dirname "$1")
+	printf "$dir/$(green $base)"
+}
+
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+startup()
+{
+	if (( $UID == 0 ))
+	then
+		die "The program cant run with root privileges"\
+			"Please, create new common user or sign in as an existing user"
+	fi
+
+	if ! [[ -f "$dotFilesTab" ]]
+	then
+		varn "No incron table file"
+		choose "Create"
+		if [[ -d "$(dirname "$dotFilesTab")" ]]
+		then
+			printf " Creating directory for table file\n"
+			mkdir -p "$(dirname "$dotFilesTab")"
+		fi
+		touch $dotFilesTab
+		if_success $? die_if_not "Table file created successfully"\
+					  "Cant create table file"
+	fi
+
+	if ! [[ -d "$dotFilesStore" ]]
+	then
+		varn "No store directory"
+		choose "Create"
+		mkdir -p "$dotFilesTab"
+		if_success $? die_if_not "Store directory successfully created"\
+					  "Cant create store directory"
+	fi
+}
+
+incrontab_reload()
+{
+	errmsg=$(sudo incrontab -u $USER "$dotFilesTab" 2>&1)
+	if_success $? "Incrontab successfuly reloaded for user: $(cyan $USER)"\
+				  "Some error ocurred while reloading incrontab
+incrontab: $errmsg"
+
+	return $?
+}
+
+add_entry()
+{
+	if (( $# <= 0 ))
+	then
+		return
+	fi
+
+	if ! [[ -r "$dotFilesTab" ]]; then
+		die "Cant open directory: $dotFilesTab"
+	fi
+
+	file=$(realpath "${1}")
+	if ! [[ -r "$file" ]]; then
+		die "No such file: $file"
+	fi
+
+	path=$(colorize_path $file)
+	printf " -> Adding $path\n"
+
+	printf "$file $mask $hendler\n" >> "$dotFilesTab"
+	if_success $? "Entry successfuly added"\
+                  "Some error ocurred while adding new entry to incron table"
+
+	incrontab_reload
+
+	shift
+}
+
+sync()
+{
+	if [[ $1 == all ]]; then
+		echo "Starting syncing all files in $dotFilesTab"
+
+		# NO PROCESSING SPACES IN FILE NAMES
+		files=()
+		while read -r; do
+			files+=( "$(awk -F "$mask" '{print $1}' <<< "$REPLY")" )
+		done <${dotFilesTab}
+
+		err=0
+		for file in ${files[@]}
+		do
+			sync "$file"
+			if (( $? != 0 ))
+			then
+				let err++
+			fi
+		done
+
+		if_success $err "All files in $dotFilesTab heve been synced"\
+						"$(cyan $err) files were not synced"
+
+		return 0
+	fi
+
+	if ! [[ -f "$file" ]]
+	then
+		varn "No such file: $(red "$file")"
+		return
+	fi
+
+	errfile=$(mktemp)
+	file=$(realpath $1)
+	srcDir=$(dirname "$file")
+	dstDir="${dotFilesStore}/${srcDir#/*}"
+
+	# removing castom username with static user
+	tmp=$(sed "s/$USER/user/g" <<< $dstDir)
+	dstDir="$tmp"
+	
+	[[ -d "${dstDir}" ]] || mkdir -p "$dstDir"
+
+	cp -r "$file" "$dstDir" 2> $errfile
+
+	if (( $? != 0 )); then
+		errmsg="Cant sync file: \"$file\" with incron
+		$(cat $errfile)"
+		log "$errmsg"
+		[[ -n $(which $notify_send) ]] && $notify_send "$errmsg"
+	fi
+
+	rm -f $errfile
+}
+
+migrate()
+{
+	create_from_file()
+	{
+		file=$(realpath $1)
+
+		if ! [[ -f $file ]]; then
+			die "No such file: $(colorize_path $(red $file))"
+		fi
+
+		>$buff
+
+		columns=$(tput cols)
+		len=$(( columns - 29 ))
+		
+		while read line
+		do
+			path=$(awk -F "$mask" '{print $1}' <<< "$line")
+			cpath=$(colorize_path "$path")
+			entry=$(printWW "$cpath" $len)
+			printf " -> Adding \"%s\" to incron table\n" "$entry"
+			printf "$path $mask $hendler\n" >> "$buff"
+		done <${file}
+
+		old_lines=$(wc -l < $dotFilesTab)
+
+		# sort and delete same lines
+		cat "$dotFilesTab" "$buff" | sort | uniq > ${buff}.1
+		mv ${buff}.1 ${buff}
+		rm -f ${buff}.1
+
+		new_lines=$(wc -l < $buff)
+		echo "Adding $(( new_lines - old_lines )) entries"
+		choose
+
+		cat $buff > $dotFilesTab
+		if_success $? "Importing from $(green $file) successfuly completed"\
+					  "Cant import from $(red $file)"
+
+		rm -f $buff
+
+		incrontab_reload
+	}
+
+	write_to_file()
+	{
+		file="$(realpath $1)"
+
+		if ! [[ -f $file ]]; then
+			die "No output file specified"
+		fi
+
+		if [[ -f $file ]]; then
+			echo "File: $file exist"
+			choose "Rewrite"
+			>"$file"
+		fi
+
+		echo "Writing pathes to $(realpath $file) file"
+		cat $dotFilesTab | awk -F "$mask" '{print $1}' > $file
+		
+		if_success $? "Wrote $(cyan $(wc -l < $file)) pathes"\
+					  "Cant export pathes to $(red $file)"
+	}
+	
+	case $1 in
+		from)
+			create_from_file
+			;;
+		to)
+			write_to_file
+			;;
+		*)
+			varn "Unknown option for $(cyan "migrate") command: $*"
+			;;
+	esac
+}
+
+formating()
+{
+	columns_formanting()
+	{
+		print_spaces() { for i in $(seq $1); do printf " "; done; }
+
+		
+		maxlen=$(cat $dotFilesTab | awk -F"$mask" '
+				BEGIN {max = 0}
+					{ 
+						gsub(" ", "", $1)
+						if (length($1) > max)
+							max = length($1)
+					}
+				END {print max}')
+
+		cat $dotFilesTab | awk -F"$mask" -v max=$maxlen '
+					BEGIN {OFS = FS} 
+					{
+						gsub(" ", "", $1)
+						printf $1" "
+						n=(max-length($1))
+						for (i=0; i < n; i++)
+							printf " "
+						$1=""
+						print $0
+					}' > $buff
+		printerr="$?"
+
+		cat $buff > $dotFilesTab
+		err=$(( $? + printerr ))
+		if_success $err "incron table was formatted"\
+					  "incron table was $(red "NOT") formatted"
+		rm -f $buff
+	}
+
+	case $1 in
+		columns)
+			columns_formanting ;;
+		*)
+			columns_formanting ;;
+	esac
+}
+
+health()
+{
+	existence_check()
+	{
+		echo "Running existence check..."
+		i=1
+		err=0
+		while read line
+		do
+			OLD_IFS="$IFS"
+			unset IFS
+			tpath=$(awk -F "$mask" '{print $1}' <<< "$line")
+			path=$(echo $tpath)
+			IFS="$OLD_IFS"
+
+			if ! [[ -r $path ]]
+			then
+				let err++
+				varn "Line №$i. No file: \"$path\""
+			fi
+			let i++
+		done <$dotFilesTab
+		
+		if_success $err "No bad pathes found"\
+						"$(cyan $err) bad files were found"
+	}
+	
+	clones_check()
+	{
+		cat $dotFilesTab | uniq > $buff
+
+		old=$(wc -l < $dotFilesTab)
+		new=$(wc -l < $buff)
+		dubs=$(( old - new ))
+		
+		#will exit if no dublicates were found
+		if_success $dubs "No duplicates were found"\
+						 "$(cyan $dubs) dublicates were found"\
+						 exit
+
+		choose "Remove entry dublicates"
+
+		cat $buff > $dotFilesTab
+
+		if_success $? "incron table updated successfully"\
+					  "Cant update incron table"
+	}
+	
+	case $1 in
+		existence)
+			existence_check
+			;;
+		clones)
+			clones_check
+			;;
+		'')
+			existence_check
+			;;
+		*)
+			varn "Unknown option for $(cyan "health") command: $*"
+			;;
+	esac
+}
+
+notify_send="notify-send"
+
+mask="IN_MODIFY"
+hendler="$(basename $0) sync \$@"
+dotFilesTab="$HOME/.config/incron/dotfiles"
+dotFilesStore="/home/data/dotfiles"
+
+buff=$(mktemp)
+
+startup
+
+command="$1"
+arg="$2"
+
+case $command in
+	add|a)
+		add_entry "$arg"
+		;;
+	sync)
+		sync "$arg"
+		;;
+	migrate)
+		migrate "$arg"
+		;;
+	format)
+		formating "$arg"
+		;;
+	health)
+		health "$arg"
+		;;
+	h|help)
+		usage
+		;;
+	*)
+		die "Unknown option: $*"
+		;;
+esac
+
+cleanup
