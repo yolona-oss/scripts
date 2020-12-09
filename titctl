@@ -340,13 +340,6 @@ do
 	esac
 done
 
-# if (( OPTIND > 0 )) && [[ -n ${*} ]]
-# then
-# 	printf "Not valide option: \"%q\"\n\n" "${@}"
-# 	usage
-# 	exit 1
-# fi
-
 (( ${toprint} == 1 )) && colorized_list
 
 exit 0

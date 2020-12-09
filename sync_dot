@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 #Script to synchronyse system configuration files using incron.
+#bash-completion script exist
 #Dependencies:
 #  1. incron
 #  2. awk
 #  3. base
 #  4. sudo
 #  5. bash
+#Optional
+#  1. bash-completion
 
 # USAGE / HELP
 #VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV#
@@ -16,20 +19,22 @@ usage() #https://stackoverflow.com/questions/19507902/bash-script-usage-output-f
 	# Put here all the options your script accepts
 	local options=(
 		'add <FILE>'
-		'sycn [ALL] <FILE>'
+		'sync [ALL] <FILE>'
 		'migrate <NAME>'
-		'forman <NAME>'
+		'format <NAME>'
 		'health <NAME>'
+		'clean <NAME>'
 		'h, help'
 	)
 	# Put here the corresponding descriptions for every option you specified in the array above
 	local descriptions=(
 		"Adding files to incron table, takes one argument - path of file. Argument required."
-		"Command that runs automaticaly every time the incrond is triggered. With <all> specifier syncing all entries in incron table"
+		"Command that runs automaticaly every time the incrond is triggered. With <all> specifier syncing all entries in incron table."
 		"Importing or exporting files pathes to/from file. Runs with <to> <from> specifier."
 		"Formating incron table. Runs with <columns> specifier aligning all columns."
-		"Checking incron table for some errors. Runs with <existence> specifier checking all files pathes for existence. Runs with <clones> specifier checking for entry dublicates. By default runs <existence> check"
-		"Display help"
+		"Checking incron table for some errors. Runs with <existence> specifier checking all files pathes for existence. Runs with <clones> specifier checking for entry dublicates. By default runs <existence> check."
+		"Cleaning store directory and table directory. With <all> specifier deletes whole directory. With <unused> only files that not included in incron table. With <saves> delete all table save."
+		"Display help."
 	)
 	# Put here the offset options will get
 	local options_offset=3
@@ -123,11 +128,20 @@ printWW() { # print shorted string by ${2} param
 
 log() { logger -p user.notice "Sync config: $*"; }
 
+alarm()
+{
+	for msg in "$@"
+	do
+		printf "[$(yellow "II")] $1\n"
+		shift
+	done
+}
+
 varn()
 {
 	for msg in "$@"
 	do
-		echo "[$(red '!!')] $msg"
+		printf "[$(red '!!')] $msg\n"
 		shift
 	done
 }
@@ -177,6 +191,10 @@ if_success()
 
 	if (( $flag == 0 ))
 	then
+		if [[ $2 == "skip" ]]
+		then
+			return
+		fi
 		success_msg "$2"
 
 		if [[ -n $4 ]]
@@ -202,6 +220,11 @@ if_success()
 	fi
 }
 
+make_save()
+{
+	cp "$dotFilesTab" "${dotFilesTab}-$(date '+%d.%m.%Y-%H:%M')" && return 0
+}
+
 #COLORIZING
 _NORMAL=$(tput setaf 7)
 red() { printf "$(tput setaf 1)${*}${_NORMAL}"; }
@@ -214,7 +237,7 @@ colorize_path()
 {
 	base=$(basename "$1")
 	dir=$(dirname "$1")
-	printf "$dir/$(green $base)"
+	printf "$dir/$(${2:-green} $base)"
 }
 
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -261,11 +284,12 @@ incrontab: $errmsg"
 	return $?
 }
 
+#add function for adding whole directories
 add_entry()
 {
-	if (( $# <= 0 ))
+	if (( $# == 0 ))
 	then
-		return
+		varn "No argument passed"
 	fi
 
 	if ! [[ -r "$dotFilesTab" ]]; then
@@ -281,12 +305,16 @@ add_entry()
 	printf " -> Adding $path\n"
 
 	printf "$file $mask $hendler\n" >> "$dotFilesTab"
-	if_success $? "Entry successfuly added"\
+	if_success $? "skip"\
                   "Some error ocurred while adding new entry to incron table"
 
-	incrontab_reload
-
 	shift
+	if (( $# > 0 ))
+	then
+		add_entry $1
+	else
+		incrontab_reload
+	fi
 }
 
 sync()
@@ -297,7 +325,7 @@ sync()
 		# NO PROCESSING SPACES IN FILE NAMES
 		files=()
 		while read -r; do
-			files+=( "$(awk -F "$mask" '{print $1}' <<< "$REPLY")" )
+			files+=( "$(awk -F "$mask" '{gsub(" ", "", $1); print $1}' <<< "$REPLY")" )
 		done <${dotFilesTab}
 
 		err=0
@@ -328,8 +356,7 @@ sync()
 	dstDir="${dotFilesStore}/${srcDir#/*}"
 
 	# removing castom username with static user
-	tmp=$(sed "s/$USER/user/g" <<< $dstDir)
-	dstDir="$tmp"
+	dstDir=${dstDir//\/home\/$USER/\/home\/user}
 	
 	[[ -d "${dstDir}" ]] || mkdir -p "$dstDir"
 
@@ -362,7 +389,7 @@ migrate()
 		
 		while read line
 		do
-			path=$(awk -F "$mask" '{print $1}' <<< "$line")
+			path=$(awk -F "$mask" '{gsub(" ", "", $1); print $1}' <<< "$line")
 			cpath=$(colorize_path "$path")
 			entry=$(printWW "$cpath" $len)
 			printf " -> Adding \"%s\" to incron table\n" "$entry"
@@ -404,7 +431,7 @@ migrate()
 		fi
 
 		echo "Writing pathes to $(realpath $file) file"
-		cat $dotFilesTab | awk -F "$mask" '{print $1}' > $file
+		cat $dotFilesTab | awk -F "$mask" '{gsub(" ", "", $1); print $1}' > $file
 		
 		if_success $? "Wrote $(cyan $(wc -l < $file)) pathes"\
 					  "Cant export pathes to $(red $file)"
@@ -423,6 +450,7 @@ migrate()
 	esac
 }
 
+#add sort
 formating()
 {
 	columns_formanting()
@@ -452,6 +480,14 @@ formating()
 					}' > $buff
 		printerr="$?"
 
+		if ! (( $(wc -l < $buff) == $(wc -l < "$dotFilesTab") ))
+		then
+			die "Columns formatting error"
+		fi
+
+		#make table save
+		make_save
+		
 		cat $buff > $dotFilesTab
 		err=$(( $? + printerr ))
 		if_success $err "incron table was formatted"\
@@ -469,6 +505,7 @@ formating()
 
 health()
 {
+	#add view delete entries list
 	existence_check()
 	{
 		echo "Running existence check..."
@@ -476,11 +513,7 @@ health()
 		err=0
 		while read line
 		do
-			OLD_IFS="$IFS"
-			unset IFS
-			tpath=$(awk -F "$mask" '{print $1}' <<< "$line")
-			path=$(echo $tpath)
-			IFS="$OLD_IFS"
+			path=$(awk -F "$mask" '{gsub(" ", "", $1); print $1}' <<< "$line")
 
 			if ! [[ -r $path ]]
 			then
@@ -509,6 +542,8 @@ health()
 
 		choose "Remove entry dublicates"
 
+		make_save
+
 		cat $buff > $dotFilesTab
 
 		if_success $? "incron table updated successfully"\
@@ -531,12 +566,98 @@ health()
 	esac
 }
 
+cleaning()
+{
+	delete_store()
+	{
+		alarm "Are you sure want to remove store directory?"
+		choose
+
+		errmsg=$(rm -rf "$dotFilesStore" 2>&1)
+		if_success $? "Store deleted"\
+					  "Cant delete store directore
+rm: $errmsg"
+	}
+
+	delete_unused()
+	{
+		exist_files=()
+		while IFS=  read -r -d $'\0'; do
+			exist_files+=("$REPLY")
+		done < <(find "$dotFilesStore" ! -path "*/.git/*" ! -path "*/.git" -type f -print0)
+
+		columns=$(tput cols)
+		len=$(( columns - 5 ))
+
+		for file in ${exist_files[@]}
+		do
+			#removing /home/user/ with /home/$USER/
+			ufile=${file//\/home\/user\//\/home\/$USER\/}
+			ufile=${ufile//$dotFilesStore/}
+			if [[ -z $(grep $ufile "$dotFilesTab") ]]
+			then
+				path=$file
+				cpath=$(colorize_path "$path" "red")
+				shorted=$(printWW "$cpath" $len)
+				printf " -> removing \"%s\"\n" "$shorted"
+
+				rm -f $file
+			fi
+		done
+	}
+
+	delete_table_saves()
+	{
+		tabDir=$(dirname $dotFilesTab)
+		tabName=$(basename $dotFilesTab)
+		save_file_pattern=${tabDir}/${tabName}-${save_suffix}
+		i=0
+
+		alarm "List of saves:"
+		for save in $(ls $save_file_pattern 2>/dev/null)
+		do
+			printf "%3s. %s\n" $i $save
+			let i++
+		done
+
+		if (( $i == 0 ))
+		then
+			alarm "No save files in: $(printWW $tabDir 20)"
+			return 0
+		fi
+
+		choose "Delete all"
+
+		errmsg=$(rm  -f $save_file_pattern 2>&1)
+
+		if_success $? "All table save files in $(green "$(printWW $tabDir 20)") have been deleted"\
+					  "Cant delete some save files
+rm: $errmsg"
+	}
+
+	case $1 in
+		all)
+			delete_store
+			;;
+		unused)
+			delete_unused
+			;;
+		saves)
+			delete_table_saves $tabDir/$2
+			;;
+		*)
+			varn "Unknown option for $(cyan "clean") command: $*"
+			;;
+	esac
+}
+
 notify_send="notify-send"
 
+save_suffix=[0-1][0-9].[0-9][0-9].[0-9][0-9][0-9][0-9]-[0-2][0-9]:[0-6][0-9]
 mask="IN_MODIFY"
 hendler="$(basename $0) sync \$@"
-dotFilesTab="$HOME/.config/incron/dotfiles"
-dotFilesStore="/home/data/dotfiles"
+dotFilesTab=${dotFilesTab:="$HOME/.config/incron/dotfiles"}
+dotFilesStore=${dotFilesStore:="/home/data/dotfiles"}
 
 buff=$(mktemp)
 
@@ -547,7 +668,8 @@ arg="$2"
 
 case $command in
 	add|a)
-		add_entry "$arg"
+		shift
+		add_entry "$@"
 		;;
 	sync)
 		sync "$arg"
@@ -560,6 +682,9 @@ case $command in
 		;;
 	health)
 		health "$arg"
+		;;
+	clean)
+		cleaning "$arg"
 		;;
 	h|help)
 		usage

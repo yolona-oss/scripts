@@ -1,0 +1,58 @@
+#!/bin/bash
+#rename file or files with random symbols
+
+case $1 in
+	-r|--recursive)
+		rflag=1 
+		shift ;;
+	-l|--length)
+		len=$1
+		shift ;;
+esac
+
+if ! which mcookie 2>&1>/dev/null; then
+	printf "Please install \"mcookie\"\n"
+	exit
+fi
+
+if ! [[ -r "$1" ]]; then
+	printf "No such file: $1"
+	exit
+fi
+
+# add func to handle max num of uniq file names
+if [[ $rflag ]]; then
+	total=$(find "$(realpath "$1")" -type f | wc -l)
+	cur=0
+
+	while read file; do
+		suf=${file/*.}
+		dir=$(dirname "$file")
+		if [[ $lflag ]]; then
+			printf ""
+		else
+			len=$(( 13 - ${#suf} ))
+		fi
+
+		mv -i "$file" "$dir/$(mcookie | cut -c 1-$len).$suf"
+
+		(( cur++ ))
+		printf "\r %*d/%d" ${#total} $cur $total
+	done < <(find "$(realpath "$1")" ! -type d)
+
+	printf "\nRenaming completed\n"
+
+	exit
+fi
+
+if [[ -d $1 ]]; then
+	printf "$1 its a directory\n"
+	exit
+fi
+
+suf=${1/*.}
+dir=$(dirname "$1")
+
+mv "$1" "$dir/$(mcookie).$suf"
+
+printf "\"$1\" randomy renamed\n"
