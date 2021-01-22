@@ -3,12 +3,28 @@
 #bash-completion script exist
 #Dependencies:
 #  1. incron
-#  2. awk
-#  3. base
+#  2. gawk
+#  3. base, linux-utils
 #  4. sudo
 #  5. bash
-#Optional
+#Optional:
 #  1. bash-completion
+
+trap die SIGINT SIGTERM
+
+dotFilesTab=${dotFilesTab:="$HOME/.config/incron/dotfiles"}
+dotFilesStore=${dotFilesStore:="/home/data/dotfiles"}
+
+notify_send="notify-send"
+
+save_suffix=[0-1][0-9].[0-9][0-9].[0-9][0-9][0-9][0-9]-[0-2][0-9]:[0-6][0-9]
+mask="IN_MODIFY"
+hendler="$(basename $0) sync \$@"
+
+buff=$(mktemp)
+
+command="$1"
+arg="$2"
 
 # USAGE / HELP
 #VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV#
@@ -118,7 +134,7 @@ usage() #https://stackoverflow.com/questions/19507902/bash-script-usage-output-f
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
 
 # UTILS
-#VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+#VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV#
 
 printWW() { # print shorted string by ${2} param
 	end=${#1}
@@ -183,38 +199,22 @@ if_success()
 	#will be run according to the value of $flag
 	flag=$1
 
-	if [[ $2 == "die_if_not" ]]
-	then
+	if [[ $2 == "die_if_not" ]]; then
 		diecmd="die"
 		shift
 	fi
 
-	if (( $flag == 0 ))
-	then
-		if [[ $2 == "skip" ]]
-		then
-			return
-		fi
-		success_msg "$2"
+	if (( ! $flag )); then
+		[[ $2 == "skip" ]] || success_msg "$2"
 
-		if [[ -n $4 ]]
-		then
-			$4
-		fi
+		[[ -n $4 ]] && $4
 
 		return 0
 	else
-		varn "$3"
+		[[ $3 == "skip" ]] || varn "$3"
 
-		if [[ -n $5 ]]
-		then
-			$5
-		fi
-
-		if [[ -n $diecmd ]]
-		then
-			$diecmd
-		fi
+		[[ -n $5 ]] && $5
+		[[ -n $diecmd ]] && $diecmd
 
 		return 1
 	fi
@@ -244,7 +244,7 @@ colorize_path()
 
 startup()
 {
-	if (( $UID == 0 ))
+	if (( ! $UID ))
 	then
 		die "The program cant run with root privileges"\
 			"Please, create new common user or sign in as an existing user"
@@ -347,10 +347,9 @@ sync()
 	if ! [[ -f "$file" ]]
 	then
 		varn "No such file: $(red "$file")"
-		return
+		return 1
 	fi
 
-	errfile=$(mktemp)
 	file=$(realpath $1)
 	srcDir=$(dirname "$file")
 	dstDir="${dotFilesStore}/${srcDir#/*}"
@@ -360,16 +359,17 @@ sync()
 	
 	[[ -d "${dstDir}" ]] || mkdir -p "$dstDir"
 
-	cp -r "$file" "$dstDir" 2> $errfile
+	cperr=$(cp "$file" "$dstDir" 2>&1)
 
-	if (( $? != 0 )); then
+	if (( -n $cperr )); then
 		errmsg="Cant sync file: \"$file\" with incron
-		$(cat $errfile)"
+$cperr"
 		log "$errmsg"
 		[[ -n $(which $notify_send) ]] && $notify_send "$errmsg"
+		return 1
 	fi
 
-	rm -f $errfile
+	return 0
 }
 
 migrate()
@@ -420,7 +420,7 @@ migrate()
 	{
 		file="$(realpath $1)"
 
-		if ! [[ -f $file ]]; then
+		if [[ -z $file ]]; then
 			die "No output file specified"
 		fi
 
@@ -439,10 +439,10 @@ migrate()
 	
 	case $1 in
 		from)
-			create_from_file
+			create_from_file $2
 			;;
 		to)
-			write_to_file
+			write_to_file $2
 			;;
 		*)
 			varn "Unknown option for $(cyan "migrate") command: $*"
@@ -529,7 +529,7 @@ health()
 	
 	clones_check()
 	{
-		cat $dotFilesTab | uniq > $buff
+		sort $dotFilesTab | uniq > $buff
 
 		old=$(wc -l < $dotFilesTab)
 		new=$(wc -l < $buff)
@@ -651,20 +651,7 @@ rm: $errmsg"
 	esac
 }
 
-notify_send="notify-send"
-
-save_suffix=[0-1][0-9].[0-9][0-9].[0-9][0-9][0-9][0-9]-[0-2][0-9]:[0-6][0-9]
-mask="IN_MODIFY"
-hendler="$(basename $0) sync \$@"
-dotFilesTab=${dotFilesTab:="$HOME/.config/incron/dotfiles"}
-dotFilesStore=${dotFilesStore:="/home/data/dotfiles"}
-
-buff=$(mktemp)
-
 startup
-
-command="$1"
-arg="$2"
 
 case $command in
 	add|a)
@@ -675,7 +662,8 @@ case $command in
 		sync "$arg"
 		;;
 	migrate)
-		migrate "$arg"
+		shift
+		migrate "$@"
 		;;
 	format)
 		formating "$arg"

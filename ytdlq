@@ -1,36 +1,26 @@
 #!/bin/sh -e
 
-: "${YTDL_OPTS:='--prefer-ffmpeg  -o %(title)s.%(ext)s'}"
-: "${YTDLQ_DIR:=~/.ytdlq}"
+: "${YTDL_OPTS:='-o %(title)s.%(ext)s'}"
+: "${YTDLQ_DIR:=$PWD}"
 queue=$YTDLQ_DIR/queue
-completed=$YTDLQ_DIR/completed
-downloading=$YTDLQ_DIR/downloading
 
 usage() { >&2 echo "Usage: ytdlq [-a] [-d]" ; exit 1 ; }
 
 dl() {
-    mkdir -p "$completed" "$downloading"
-    cd "$downloading"
     log=$YTDLQ_DIR/ytdlq-$(printf '%s' "$1" | sed -e 's|.*./||' -e 's|&.*||').log
 
-    # shellcheck disable=2086
-    youtube-dl $YTDL_OPTS -c -R 50 \
-        --geo-bypass --no-playlist \
-        --socket-timeout 20 --no-color  \
-        --exec "mv -f {} $completed ; rm \"$log\" ; \
-            notify-send \"YT: {} has finished downloading\"" "$1" >"$log" 2>&1
+    youtube-dl "$1" $YTDL_OPTS -c -R 50 \
+        --exec "rm -f \"$log\" ; \
+            notify-send -a YT \"{} has finished downloading\"" "$1" >"$log" 2>&1
 }
 
 start_daemon() {
-    set -x
-    mkdir -p "$YTDLQ_DIR"
-    touch "$queue"
     while sleep 5 ; do
         while [ -s "$queue" ] ; do
-            while ! ping -q -L -c 1 -s 1 invidio.us >/dev/null ; do
+            while ! ping -q -L -c 1 -s 1 yandex.ru >/dev/null ; do
                 sleep 30
             done
-            read -r link <"$queue"
+            read -r link < "$queue"
             dl "$link" || printf '%s\n' "$link" >>"$queue".rej
             sed -i '1d' "$queue"
         done

@@ -2,7 +2,7 @@
 # Download all sources for $1 file in sequence
 
 pop(){
-	query="${1}"
+	queue="${1}"
 	lines=$(wc -l ${queue} | awk '{print $1}')
 	tmp=$(mktemp)
 
