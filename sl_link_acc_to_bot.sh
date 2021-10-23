@@ -1,0 +1,20 @@
+#!/bin/bash
+
+ACC_NUMBER=$1
+
+BOT_PATH=$2
+BOT_DST_PATH="$(dirname "$BOT_PATH")/sl_bots/$1"
+
+USERNAME=$3
+PASSWORD=$4
+
+[[ ! -d "$BOT_DST_PATH" ]] && mkdir -p "$BOT_DST_PATH"
+
+cp -ur "$BOT_PATH/"* "$BOT_DST_PATH"
+
+printf "QUEST_PRIORITY=true
+MINUTES_BATTLES_INTERVAL=10
+CLAIM_SEASON_REWARD=false
+ACCOUNT=%s
+PASSWORD=%s" "$USERNAME" "$PASSWORD" > "$BOT_DST_PATH/.env"
+
