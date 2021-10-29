@@ -1,7 +1,14 @@
 #!/bin/bash
+#########################################
+#
+#    *.desktop file game file creator
+#
+#########################################
+
+patterns=(start.sh start run runit run.sh run-game rungame run-game.sh rungame.sh "$1" "${1}.sh" "${1}.x86_64" "$2" "${2}.sh" "${2}.x86_64" "$3" "${3}.sh" "${3}.x86_64")
 
 findexec() {
-	for file_pattern in start.sh start run runit run.sh run-game rungame run-game.sh rungame.sh "$1" "${1}.sh" "${1}.x86_64" "$2" "${2}.sh" "${2}.x86_64" "$3" "${3}.sh" "${3}.x86_64"
+	for file_pattern in ${patterns}
 	do
 		[[ $(file "$file_pattern") =~ exec ]] && exec="$file_pattern" && return
 	done
@@ -26,7 +33,7 @@ do
 
 	cd "${dir[i]}"
 
-	out="$HOME/desktop/$(basename "$(pwd)").desktop"
+	out="$HOME/Desktop/$(basename "$(pwd)").desktop"
 	findexec "$(basename "$(pwd)")" "$(basename "$(pwd)"|sed 's/ //g')" "$(basename "$(pwd)"|sed 's/ /_/g')"
 
 	printf "[Desktop Entry]
@@ -39,5 +46,5 @@ Path=$(realpath "`pwd`")
 Categories=Game
 Terminal=false" > "$out"
 
-cd - >/dev/null
+	cd - >/dev/null
 done
