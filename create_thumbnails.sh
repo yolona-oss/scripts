@@ -1,5 +1,7 @@
 #!/bin/bash
 
+#Video thumbnail batch creator
+
 create()
 {
 	# vcsi --grid 1x1 $(realpath "${line}") #--num-samples 1 --format jpg --quality 70 -o "${thumb_dir}/${name}.jpg" 

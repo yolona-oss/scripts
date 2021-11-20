@@ -1,5 +1,7 @@
 #!/bin/sh
 
+#suckless.org patch creator
+
 # YYMMDD
 date=$(git log -1 --date=format:"%Y%m%d" --format="%ad")
 

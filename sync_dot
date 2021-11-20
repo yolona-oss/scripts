@@ -13,7 +13,7 @@
 trap die SIGINT SIGTERM
 
 dotFilesTab=${dotFilesTab:="$HOME/.config/incron/dotfiles"}
-dotFilesStore=${dotFilesStore:="/home/data/dotfiles"}
+dotFilesStore=${dotFilesStore:="$HOME/dotfiles"}
 
 notify_send="notify-send"
 
@@ -266,8 +266,8 @@ startup()
 
 	if ! [[ -d "$dotFilesStore" ]]
 	then
-		varn "No store directory"
-		choose "Create"
+		varn "No dotf-store directory"
+		choose "Creating"
 		mkdir -p "$dotFilesTab"
 		if_success $? die_if_not "Store directory successfully created"\
 					  "Cant create store directory"

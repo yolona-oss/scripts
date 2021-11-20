@@ -39,11 +39,11 @@ do
 	printf "[Desktop Entry]
 Type=Application
 Name=$(basename "$(pwd)")
-GenericName=Game
+GenericName=
 Encoding=UTF-8
 Exec=./$exec
 Path=$(realpath "`pwd`")
-Categories=Game
+Categories=
 Terminal=false" > "$out"
 
 	cd - >/dev/null

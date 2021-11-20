@@ -1,5 +1,7 @@
 #!/bin/bash
 
+#batch in-file text renamer
+
 usage()
 {
 	printf "$(basename "$0"): src:dst -[frc]\n Replasing src with dst in file of group files\n -f [file1] [file2]\treplasing in file or group of files\n -r [path/to/dir]\trecursivly replasing\n -c\tclean save files\n"
