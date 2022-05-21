@@ -1,0 +1,13 @@
+#!/bin/bash
+
+opts=""
+while (( ${#*} )); do
+    case $1 in
+        'w') opts+=" -u";;
+        's') opts+=" -s";;
+    esac
+    shift
+done
+
+scrot '%Y.%m.%d-%H:%M:%S_$wx$h.jpeg' -e 'printf "$f" > /tmp/scrotbuf ; mv "$f" /home/data/images/screenshots' -q 100 ${opts}
+xclip -selection clipboard -t image/jpeg -i "/home/data/images/screenshots/$(cat /tmp/scrotbuf)"

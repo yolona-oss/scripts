@@ -33,7 +33,7 @@ do
 
 			echo "Processing file $file..."
 			# add numeration
-			sed -i.${savepostfix} "s/$src/$dst/g" "${file}"
+			sed -i.${savepostfix} "s,$src,$dst,g" "${file}"
 			shift
 			;;
 		r)
@@ -73,7 +73,7 @@ do
 			while read file
 			do
 				echo "Editing $file"
-				sed -i.${savepostfix} "s/$src/$dst/g" "$file"
+				sed -i.${savepostfix} "s,$src,$dst,g" "$file"
 			done <<< $(find "$dir" \( ! -regex '.*/\..*' \) -type f)
 
 			echo "Done"

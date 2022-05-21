@@ -156,6 +156,7 @@ make_colorized_list()
 
 		# size="$(wc -l "${file}" | cut -d' ' -f 1)"
 		size="$(du -k "$(realpath "${file}")" | cut -f 1)"
+        size=${0:=$size}
 		linelen=$(( (${#id}+2) + (${#date}+3) + (size_field_len+1) + (${#lection}+1) ))
 		printf "%3q %12q " "${i}" "${date}" 
 		if (( ${size} < 50 )); then

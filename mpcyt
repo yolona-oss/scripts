@@ -1,0 +1,1 @@
+mpc add $(youtube-dl --output "asdf-youtbe-dl.mp3" --prefer-insecure -g -f140 "$1")

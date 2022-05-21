@@ -13,7 +13,7 @@
 trap die SIGINT SIGTERM
 
 dotFilesTab=${dotFilesTab:="$HOME/.config/incron/dotfiles"}
-dotFilesStore=${dotFilesStore:="$HOME/dotfiles"}
+dotFilesStore=${dotFilesStore:="$HOME/data/dotfiles"}
 
 notify_send="notify-send"
 
@@ -142,7 +142,7 @@ printWW() { # print shorted string by ${2} param
 	[ ${begin} -ge 1 ] && echo "..$(cut -c$(( ${begin} + 3 ))-${end} <<< "$1")" || echo $1
 }
 
-log() { logger -p user.notice "Sync config: $*"; }
+log() { logger -p user.notice "sync_dot: $*"; }
 
 alarm()
 {
@@ -352,10 +352,10 @@ sync()
 
 	file=$(realpath $1)
 	srcDir=$(dirname "$file")
-	dstDir="${dotFilesStore}/${srcDir#/*}"
+	dstDir="${srcDir}"
 
 	# removing castom username with static user
-	dstDir=${dstDir//\/home\/$USER/\/home\/user}
+	dstDir="${dotFilesStore}${dstDir//\/home\/$USER/\/home\/user}/"
 	
 	[[ -d "${dstDir}" ]] || mkdir -p "$dstDir"
 

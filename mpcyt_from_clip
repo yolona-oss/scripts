@@ -1,0 +1,1 @@
+mpcyt "$(xclip -o -selection CLIPBOARD)"
