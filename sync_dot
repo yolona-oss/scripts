@@ -11,6 +11,7 @@
 #  1. bash-completion
 
 trap die SIGINT SIGTERM
+shopt -s globstar
 
 dotFilesTab=${dotFilesTab:="$HOME/.config/incron/dotfiles"}
 dotFilesStore=${dotFilesStore:="$HOME/data/dotfiles"}
@@ -296,19 +297,30 @@ add_entry()
 		die "Cant open directory: $dotFilesTab"
 	fi
 
-	file=$(realpath "${1}")
-	if ! [[ -r "$file" ]]; then
-		die "No such file: $file"
-	fi
+    add_file() {
+        path=$(colorize_path "$1")
+        printf " -> Adding $path\n"
 
-	path=$(colorize_path $file)
-	printf " -> Adding $path\n"
+        printf "$1 $mask $hendler\n" >> "$dotFilesTab"
+        if_success $? "skip"\
+                      "Some error ocurred while adding new entry to incron table"
+    }
 
-	printf "$file $mask $hendler\n" >> "$dotFilesTab"
-	if_success $? "skip"\
-                  "Some error ocurred while adding new entry to incron table"
+	_file=$(realpath "${1}")
+    if [[ -d "$_file" ]]; then
+        printf " -> Adding directory $_file\n"
+        for f in "$_file"/** # TODO this dont serve files with spaces
+        do
+            add_file "$f"
+        done
+    else
+        if ! [[ -r "$_file" ]]; then
+            die "No such file: $file"
+        fi
+        add_file "$file"
+    fi
 
-	shift
+    shift
 	if (( $# > 0 ))
 	then
 		add_entry $1
